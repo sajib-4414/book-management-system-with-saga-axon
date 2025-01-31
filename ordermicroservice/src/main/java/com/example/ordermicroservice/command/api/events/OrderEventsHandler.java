@@ -1,6 +1,7 @@
 package com.example.ordermicroservice.command.api.events;
 
 
+import com.example.commonservice.events.OrderCancelledEvent;
 import com.example.commonservice.events.OrderCompletedEvent;
 import com.example.ordermicroservice.command.api.data.Order;
 import com.example.ordermicroservice.command.api.data.OrderRepository;
@@ -25,6 +26,12 @@ public class OrderEventsHandler {
 
     @EventHandler
     public void onOrderCompletedEvent(OrderCompletedEvent event){
+        Order order = orderRepository.findById(event.getOrderId()).get();
+        order.setOrderStatus(event.getOrderStatus());
+        orderRepository.save(order);
+    }
+
+    public void onOrderCancelledEvent(OrderCancelledEvent event){
         Order order = orderRepository.findById(event.getOrderId()).get();
         order.setOrderStatus(event.getOrderStatus());
         orderRepository.save(order);

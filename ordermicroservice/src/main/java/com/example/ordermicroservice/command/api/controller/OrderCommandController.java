@@ -20,8 +20,10 @@ public class OrderCommandController {
 
     @PostMapping
     public String createOrder(@RequestBody OrderRestModel orderRestModel){
+        System.out.println("got order request"+orderRestModel);
         String orderId = UUID.randomUUID().toString();
         CreateOrderCommand createOrderCommand = CreateOrderCommand.builder()
+                .userId(orderRestModel.getUserId())
                 .orderId(orderId)
                 .addressId(orderRestModel.getAddressId())
                 .productId(orderRestModel.getProductId())

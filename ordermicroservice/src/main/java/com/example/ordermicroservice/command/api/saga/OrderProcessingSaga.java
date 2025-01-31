@@ -1,6 +1,7 @@
 package com.example.ordermicroservice.command.api.saga;
 
 
+import com.example.commonservice.commands.CancelOrderCommand;
 import com.example.commonservice.commands.CompleteOrderCommand;
 import com.example.commonservice.commands.ShipOrderCommand;
 import com.example.commonservice.commands.ValidatePaymentCommand;
@@ -23,8 +24,10 @@ import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.queryhandling.QueryGateway;
 import org.axonframework.queryhandling.QueryHandler;
 import org.axonframework.spring.stereotype.Saga;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Saga
 @Slf4j
@@ -34,33 +37,67 @@ import java.util.UUID;
 //all the events that u handle for saga, has to be annotated with @saga
 public class OrderProcessingSaga {
 
-    private  CommandGateway commandGateway;
-    private  QueryGateway queryGateway;
+    @Autowired
+    private  transient CommandGateway commandGateway;
+    @Autowired
+    private  transient QueryGateway queryGateway;
 
     @StartSaga
     @SagaEventHandler(associationProperty = "orderId")
     private void handleOrderCreatedEvent(OrderCreatedEvent event){
         log.info("Order created event in saga for order id :{}",event.getOrderId());
+        log.info("printing the event for debug");
+        System.out.println(event);
 
         GetUserPaymentDetailsQuery getUserPaymentDetailsQuery = new GetUserPaymentDetailsQuery(event.getUserId());
 
         User user = null;
+        try {
+            log.info("Sending query through queryGateway...");
+            log.info("printing the query that is being sent"+getUserPaymentDetailsQuery);
+            user = queryGateway.query(getUserPaymentDetailsQuery, ResponseTypes.instanceOf(User.class))
+                    .get(10, TimeUnit.SECONDS);
+            log.info("Query response received: {}", user);
 
-        try{
-            user = queryGateway.query(getUserPaymentDetailsQuery, ResponseTypes.instanceOf(User.class)).join();//we are waiting here
-            //there is two case, whter we get the query or Not. we have to handle the exception like order cancel
-
-        }catch (Exception e){
-            log.error(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error querying user details: ", e);
             //if error, start the compensating transaction here.
+            cancelOrderCommand(event.getOrderId());
         }
-        ValidatePaymentCommand validatePaymentCommand = ValidatePaymentCommand
-                .builder()
-                .cardDetails(user.getCardDetails())
-                .orderId(event.getOrderId())
-                .paymentId(UUID.randomUUID().toString())
-                .build();
-        commandGateway.sendAndWait(validatePaymentCommand);
+        log.info("here...............");
+//
+        try {
+
+
+            log.info("Creating ValidatePaymentCommand for orderId: {}", event.getOrderId());
+            ValidatePaymentCommand validatePaymentCommand = ValidatePaymentCommand
+                    .builder()
+                    .cardDetails(user.getCardDetails())
+                    .orderId(event.getOrderId())
+                    .paymentId(UUID.randomUUID().toString())
+                    .build();
+
+            log.info("Sending ValidatePaymentCommand with paymentId: {}", validatePaymentCommand.getPaymentId());
+            try {
+                commandGateway.sendAndWait(validatePaymentCommand);
+                log.info("ValidatePaymentCommand sent successfully");
+            } catch (Exception e) {
+                log.error("Error sending ValidatePaymentCommand: ", e);
+            }
+        } catch (Exception e) {
+            log.error("Error in saga: ", e);
+        }
+
+    }
+
+    private void cancelOrderCommand(String orderId) {
+        CancelOrderCommand command = new CancelOrderCommand(orderId);
+        commandGateway.send(command);
+
+    }
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handleOrderCancelledEvent(){
+
     }
 
     // this event was already consumed in payment service, 2times, eventsource handler, event handler
@@ -89,12 +126,24 @@ public class OrderProcessingSaga {
     @SagaEventHandler(associationProperty = "orderId")
     public void handleOrderShippedEvent(OrderShippedEvent event){
         log.info("handling order shipped event in saga for order id "+event.getOrderId());
-        CompleteOrderCommand command = CompleteOrderCommand.builder()
-                .orderId(event.getOrderId())
-                .orderStatus("APPROVED")
-                .build();
-        commandGateway.send(command);
+
+
+        try{
+            log.info("sending command to shipment.....");
+            CompleteOrderCommand command = CompleteOrderCommand.builder()
+                    .orderId(event.getOrderId())
+                    .orderStatus("APPROVED")
+                    .build();
+            commandGateway.send(command);
+            log.info("command to shipment sent");
+        } catch (Exception e) {
+            e.printStackTrace();
+            log.error(e.getMessage());
+            //start the compensating transaction
+        }
+
     }
+
 
     @EndSaga
     public void handleOrderCompleted(OrderCompletedEvent event){

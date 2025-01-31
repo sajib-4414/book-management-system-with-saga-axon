@@ -11,6 +11,7 @@ public class UserProjection {
 
     @QueryHandler
     public User getUserPaymentDetails(GetUserPaymentDetailsQuery query){
+        System.out.println("recived the query here.......");
         //ideally get the deails from the DB,
         //these particular details will come from order saga
         CardDetails cardDetails = CardDetails.builder()

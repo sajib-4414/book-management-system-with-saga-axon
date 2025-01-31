@@ -1,6 +1,8 @@
 package com.example.ordermicroservice.command.api.aggregate;
 
+import com.example.commonservice.commands.CancelOrderCommand;
 import com.example.commonservice.commands.CompleteOrderCommand;
+import com.example.commonservice.events.OrderCancelledEvent;
 import com.example.commonservice.events.OrderCompletedEvent;
 import com.example.ordermicroservice.command.api.command.CreateOrderCommand;
 import com.example.ordermicroservice.command.api.events.OrderCreatedEvent;
@@ -34,6 +36,7 @@ public class OrderAggregate {
     public OrderAggregate(CreateOrderCommand createOrderCommand){
         //validate the command
 
+        System.out.println("received create order command "+createOrderCommand);
         OrderCreatedEvent orderCreatedEvent = new OrderCreatedEvent();
         BeanUtils.copyProperties(createOrderCommand, orderCreatedEvent);
         AggregateLifecycle.apply(orderCreatedEvent);
@@ -62,6 +65,21 @@ public class OrderAggregate {
 
     @EventSourcingHandler
     public void onCompleteOrder(OrderCompletedEvent event){
+        this.orderStatus = event.getOrderStatus();
+    }
+
+    @CommandHandler
+    public void handleOrderCancelled(CancelOrderCommand cancelOrderCommand){
+        OrderCancelledEvent event = new OrderCancelledEvent();
+        BeanUtils.copyProperties(cancelOrderCommand, event);
+        AggregateLifecycle.apply(event);
+        //for every such event u dispatch u need to handle even sourcing, so the event is written to the eventstore
+        //then u need to handle it in the orderservice event handler to write update the status of the order in order serivce DB(regular db)
+        //then u need to handle it in the saga, to do the saga orchestration
+    }
+
+    @EventSourcingHandler
+    public void onOrderCancelledEvent(OrderCancelledEvent event){
         this.orderStatus = event.getOrderStatus();
     }
 }
