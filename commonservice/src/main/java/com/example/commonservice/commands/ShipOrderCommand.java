@@ -1,16 +1,13 @@
 package com.example.commonservice.commands;
 
-import com.example.commonservice.model.CardDetails;
 import lombok.Builder;
 import lombok.Data;
 import org.axonframework.modelling.command.TargetAggregateIdentifier;
 
 @Data
 @Builder
-public class ValidatePaymentCommand {
-
+public class ShipOrderCommand {
     @TargetAggregateIdentifier
-    private String paymentId;
+    private String shipmentId;
     private String orderId;
-    private CardDetails cardDetails;
 }
