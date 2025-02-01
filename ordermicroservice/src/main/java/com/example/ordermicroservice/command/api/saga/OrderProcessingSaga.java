@@ -1,13 +1,8 @@
 package com.example.ordermicroservice.command.api.saga;
 
 
-import com.example.commonservice.commands.CancelOrderCommand;
-import com.example.commonservice.commands.CompleteOrderCommand;
-import com.example.commonservice.commands.ShipOrderCommand;
-import com.example.commonservice.commands.ValidatePaymentCommand;
-import com.example.commonservice.events.OrderCompletedEvent;
-import com.example.commonservice.events.OrderShippedEvent;
-import com.example.commonservice.events.PaymentProcessedEvent;
+import com.example.commonservice.commands.*;
+import com.example.commonservice.events.*;
 import com.example.commonservice.model.User;
 import com.example.commonservice.queries.GetUserPaymentDetailsQuery;
 import com.example.ordermicroservice.command.api.events.OrderCreatedEvent;
@@ -58,17 +53,7 @@ public class OrderProcessingSaga {
             user = queryGateway.query(getUserPaymentDetailsQuery, ResponseTypes.instanceOf(User.class))
                     .get(10, TimeUnit.SECONDS);
             log.info("Query response received: {}", user);
-
-        } catch (Exception e) {
-            log.error("Error querying user details: ", e);
-            //if error, start the compensating transaction here.
-            cancelOrderCommand(event.getOrderId());
-        }
-        log.info("here...............");
-//
-        try {
-
-
+            log.info("here...............");
             log.info("Creating ValidatePaymentCommand for orderId: {}", event.getOrderId());
             ValidatePaymentCommand validatePaymentCommand = ValidatePaymentCommand
                     .builder()
@@ -78,15 +63,17 @@ public class OrderProcessingSaga {
                     .build();
 
             log.info("Sending ValidatePaymentCommand with paymentId: {}", validatePaymentCommand.getPaymentId());
-            try {
-                commandGateway.sendAndWait(validatePaymentCommand);
-                log.info("ValidatePaymentCommand sent successfully");
-            } catch (Exception e) {
-                log.error("Error sending ValidatePaymentCommand: ", e);
-            }
+            commandGateway.sendAndWait(validatePaymentCommand);
+            log.info("ValidatePaymentCommand sent successfully");
+
         } catch (Exception e) {
-            log.error("Error in saga: ", e);
+            log.error("Error querying user details or validating command: ", e);
+            log.info("cancelling the order from saga");
+            //if error, start the compensating transaction here.
+            cancelOrderCommand(event.getOrderId());
         }
+
+
 
     }
 
@@ -96,7 +83,7 @@ public class OrderProcessingSaga {
 
     }
     @SagaEventHandler(associationProperty = "orderId")
-    public void handleOrderCancelledEvent(){
+    public void handleOrderCancelledEvent(OrderCancelledEvent event){
 
     }
 
@@ -106,10 +93,12 @@ public class OrderProcessingSaga {
     // Now, same event is consumed in order processing microservice, as saga handler, because ordermicroservice
     //is the orchestrator, it will listen, then send command to do the next stage in distributed transaction
     @SagaEventHandler(associationProperty = "orderId")
-    private void handle(PaymentProcessedEvent event){
+    private void handlePaymentProcessedEvent(PaymentProcessedEvent event){
         log.info("PaymentProcessedEvent in Saga for Order Id: {}", event.getOrderId());
 
         try{
+//            if(true)
+//                throw new Exception("just throwing some expection to try");
             ShipOrderCommand shipOrderCommand = ShipOrderCommand.builder()
                     .shipmentId(UUID.randomUUID().toString())
                     .orderId(event.getOrderId())
@@ -119,8 +108,17 @@ public class OrderProcessingSaga {
             e.printStackTrace();
             log.error(e.getMessage());
             //start the compensating transaction
+            cancelPaymentCommand(event);
         }
 
+    }
+    private void cancelPaymentCommand(PaymentProcessedEvent event) {
+        CancelPaymentCommand cancelPaymentCommand
+                = new CancelPaymentCommand(
+                event.getPaymentId(), event.getOrderId()
+        );
+        log.info("cancel payment command issued from order processing saga.,. for order id "+event.getOrderId());
+        commandGateway.send(cancelPaymentCommand);
     }
 
     @SagaEventHandler(associationProperty = "orderId")
@@ -149,5 +147,12 @@ public class OrderProcessingSaga {
     public void handleOrderCompleted(OrderCompletedEvent event){
         log.info("handling OrderCompletedEvent event in saga for order id "+event.getOrderId());
 
+    }
+
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handle(PaymentCancelledEvent event) {
+        log.info("PaymentCancelledEvent in Saga for Order Id : {}",
+                event.getOrderId());
+        cancelOrderCommand(event.getOrderId());
     }
 }

@@ -44,6 +44,7 @@ public class OrderAggregate {
 
     @EventSourcingHandler
     public void onOrderCreated(OrderCreatedEvent event){
+        System.out.println("EventSourcingHandler received create order command ");
         this.orderStatus = event.getOrderStatus();
         this.userId = event.getUserId();
         this.orderId = event.getOrderId();

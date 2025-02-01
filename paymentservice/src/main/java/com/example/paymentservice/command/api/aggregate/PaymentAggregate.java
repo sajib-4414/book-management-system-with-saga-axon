@@ -1,6 +1,8 @@
 package com.example.paymentservice.command.api.aggregate;
 
+import com.example.commonservice.commands.CancelPaymentCommand;
 import com.example.commonservice.commands.ValidatePaymentCommand;
+import com.example.commonservice.events.PaymentCancelledEvent;
 import com.example.commonservice.events.PaymentProcessedEvent;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +11,7 @@ import org.axonframework.eventsourcing.EventSourcingHandler;
 import org.axonframework.modelling.command.AggregateIdentifier;
 import org.axonframework.modelling.command.AggregateLifecycle;
 import org.axonframework.spring.stereotype.Aggregate;
+import org.springframework.beans.BeanUtils;
 
 //is the command handler here
 @Aggregate
@@ -40,4 +43,22 @@ public class PaymentAggregate {
         this.paymentId = event.getPaymentId();
         this.orderId = event.getOrderId();
     }
+
+    @CommandHandler
+    public void handleCancelPaymentCommand(CancelPaymentCommand cancelPaymentCommand) {
+        log.info("inside trhe payment microservice, handling the cancelpayment command...orderid="+cancelPaymentCommand.getOrderId());
+        PaymentCancelledEvent paymentCancelledEvent
+                = new PaymentCancelledEvent();
+        BeanUtils.copyProperties(cancelPaymentCommand,
+                paymentCancelledEvent);
+
+        AggregateLifecycle.apply(paymentCancelledEvent);
+    }
+
+    @EventSourcingHandler
+    public void on(PaymentCancelledEvent event) {
+        log.info("inside event sourcing handler of payment microserviuce for PaymentCancelledEvent, order id"+event.getOrderId());
+        this.paymentStatus = event.getPaymentStatus();
+    }
+
 }

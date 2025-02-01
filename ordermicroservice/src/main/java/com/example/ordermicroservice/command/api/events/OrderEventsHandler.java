@@ -19,9 +19,21 @@ public class OrderEventsHandler {
 
     @EventHandler
     public void onOrderCreatedEvent(OrderCreatedEvent event){
+        System.out.println("EventHandler received create order command ");
+        System.out.println("Event details: " + event); // Log the event object
+
         Order order = new Order();
         BeanUtils.copyProperties(event,order);
-        orderRepository.save(order);
+        System.out.println("Created order object: " + order); // Log the order object
+
+        try {
+            Order savedOrder = orderRepository.save(order);
+            Order dbOrder = orderRepository.findById(savedOrder.getOrderId()).get();
+            System.out.println("DB fetched order: " + dbOrder);
+            System.out.println("Saved order: " + savedOrder); // Log the saved order
+        } catch (Exception e) {
+            e.printStackTrace(); // In case there's a swallowed exception
+        }
     }
 
     @EventHandler
@@ -31,6 +43,7 @@ public class OrderEventsHandler {
         orderRepository.save(order);
     }
 
+    @EventHandler
     public void onOrderCancelledEvent(OrderCancelledEvent event){
         Order order = orderRepository.findById(event.getOrderId()).get();
         order.setOrderStatus(event.getOrderStatus());
